@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+
+# Go to workding directory
+work_dir=<%= context.work_dir %>
+
+if [ ! -d "$work_dir" ]
+then
+	echo "$work_dir does not exist."
+	mkdir -p $work_dir
+fi
+cd $work_dir
+
+
+# Pipeline parameters
+database_path="/cluster/tufts/biocontainers/datasets/alphafold3/20241219/public_databases"
+input_json=<%= context.json_path %>
+input_dir=<%= context.input_dir %>
+output_dir=<%= context.output_dir %>
+model_dir=<%= context.model_dir %>
+run_data_pipeline="<%= context.run_data_pipeline %>"
+run_inference="<%= context.run_inference %>"
+max_template_date=<%= context.max_template_date %>
+num_diffusion_samples=<%= context.num_diffusion_samples %>
+num_recycles=<%= context.num_recycles %>
+num_seeds=<%= context.num_seeds %>
+conformer_max_iterations_input=<%= context.conformer_max_iterations %>
+extra_parameters="<%= context.extra_parameters %>"
+
+
+# Test whether single input json is provided
+if [[ -n "${input_json//[[:blank:]]/}" ]]
+then
+    echo "The input is provided as a fasta file"
+    input="--json_path=$input_json"
+else if [[ -n "${input_dir//[[:blank:]]/}" ]]
+then
+    echo "The input is provided as a directory"
+    input="--input_dir=$input_dir"
+else
+    echo "No input is provided"
+    exit 1
+fi
+fi
+
+# Function to convert flags to boolean parameters
+set_boolean_param() {
+    local flag=$1
+    local param_name=$2
+    if [ "$flag" -eq 1 ]; then
+        echo "--$param_name=true"
+    else
+        echo "--$param_name=false"
+    fi
+}
+
+# Optional parameters
+run_data_pipeline=$(set_boolean_param "$run_data_pipeline" "run_data_pipeline")
+run_inference=$(set_boolean_param "$run_inference" "run_inference")
+
+# Test whether num_seeds is set
+if [ -z "${num_seeds// }" ]
+then
+        num_seeds=""
+else
+        num_seeds="--num_seeds=$num_seeds"
+fi
+
+# Test whether num_recycles is set
+if [ -z "${num_recycles// }" ]
+then
+        num_recycles=""
+else
+        num_recycles="--num_recycles=$num_recycles"
+fi
+
+# Test whether num_diffusion_samples is set
+if [ -z "${num_diffusion_samples// }" ]
+then
+        num_diffusion_samples=""
+else
+        num_diffusion_samples="--num_diffusion_samples=$num_diffusion_samples"
+fi
+
+# Test whether conformer_max_iterations is set
+if [ -z "${conformer_max_iterations_input// }" ]
+then
+        conformer_max_iterations=""
+else
+        conformer_max_iterations="--conformer_max_iterations=$conformer_max_iterations_input"
+fi
+
+nvidia-smi
+module purge
+module load alphafold3/<%= context.version %>
+module list 
+export SINGULARITYENV_TF_FORCE_UNIFIED_MEMORY=1  
+
+af3_command="run_alphafold.py $input --output_dir=$output_dir --db_dir $database_path --model_dir=$model_dir $run_data_pipeline $run_inference --max_template_date=$max_template_date $num_recycles $num_seeds $num_diffusion_samples $conformer_max_iterations $extra_parameters"
+
+echo "Running command: $af3_command"
+eval $af3_command

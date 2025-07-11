@@ -1,0 +1,8 @@
+---
+name: AlphaFold3
+category: Interactive Apps
+subcategory: Bioinformatics
+role: batch_connect
+description: |
+  <p>This app will launch 
+  <a href="https://github.com/google-deepmind/alphafold3" target="_blank">AlphaFold3 </a> developed by DeepMind.</p> 
