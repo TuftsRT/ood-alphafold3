@@ -93,7 +93,7 @@ nvidia-smi
 module purge
 module load alphafold3/<%= context.version %>
 module list 
-export SINGULARITYENV_TF_FORCE_UNIFIED_MEMORY=1  
+export APPTAINERENV_TF_FORCE_UNIFIED_MEMORY=1  
 
 af3_command="run_alphafold.py $input --output_dir=$output_dir --db_dir $database_path --model_dir=$model_dir $run_data_pipeline $run_inference --max_template_date=$max_template_date $num_recycles $num_seeds $num_diffusion_samples $conformer_max_iterations $extra_parameters"
 
