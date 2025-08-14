@@ -11,22 +11,24 @@ script:
   email: <%= ENV["USER"] %>@tufts.edu
   job_name: "OnDemand/AlphaFold3"
   native:
-    - "--time"
-    - "<%= bc_num_hours %>:0:0"
-    - "-n"
-    - "<%= num_cores %>"
-    - "--mem"
-    - "<%= num_memory %>"
-    - "--nodes"
-    - "1"
-    <%- if gpu_type == "a100-80GB" -%>
-    -  "-p"
-    - "<%= gpu_partition %>"
+    - "--time=<%= bc_num_hours %>:00:00"
+    - "--cpus-per-task=<%= num_cores %>"
+    - "--mem=<%= num_memory %>G"
+    - "--nodes=1"
+    - "-p <%= partition %>"
+<%
+  skip_gres = gpu_type == "none" || ["batch", "largemem", "rc2", "pangolinlab", "ruiguolab", "shushkovlab", "vaseylab"].include?(partition)
+%>
+<% unless skip_gres %>
+  <% if gpu_type == "a100_40" %>
+    - "--gres=gpu:a100:1"
+    - "--constraint=a100-40G"
+  <% elsif gpu_type == "a100_80" %>
     - "--gres=gpu:a100:1"
     - "--constraint=a100-80G"
-    <%- elsif gpu_partition == "preempt" || gpu_partition == "gpu" -%>
-    -  "-p" 
-    -   "<%= gpu_partition %>"
+  <% elsif gpu_type == "any" %>
+    - "--gres=gpu:1"
+  <% else %>
     - "--gres=gpu:<%= gpu_type %>:1"
-    <%- end -%>
-
+  <% end %>
+<% end %>
