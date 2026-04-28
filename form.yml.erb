@@ -4,6 +4,13 @@
 cluster_name = ENV.fetch('OOD_AF3_CLUSTER', 'pax')
 default_browser_root = ENV.fetch('OOD_AF3_BROWSER_ROOT', '/cluster/tufts')
 default_model_dir = ENV.fetch('OOD_AF3_DEFAULT_MODEL_DIR', '')
+
+show_qos = false
+qos_options = (`sacctmgr show assoc where user=#{ENV['USER']} format=qos%1000 --noheader --parsable2`).split(",")
+if qos_options.include?("interactive")
+  show_qos = true
+end
+
 @partition_filter = :gpu
 
 # Evaluate the shared resource_discovery.erb and capture its result. We use
@@ -49,6 +56,9 @@ form:
   - jax_compilation_cache_dir
   - resolve_msa_overlaps
   - extra_parameters
+<% if show_qos %>
+  - ta_qos
+<% end %>
 
 attributes:
   modules: "alphafold3"
@@ -282,3 +292,12 @@ attributes:
     label: Extra parameters
     help: |
       Additional `run_alphafold.py` flags. Use space-separated arguments.
+
+  ta_qos:
+    widget: check_box
+    label: "Request priority start"
+    cacheable: false
+    help: "Starts sooner, but is limited to 1 running job, up to 64 CPUs, and up to 64 GB of memory. If you need more resources, leave this unchecked."
+    value: "normal"
+    checked_value: "interactive"
+    unchecked_value: "normal"

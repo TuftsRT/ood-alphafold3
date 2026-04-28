@@ -1,0 +1,16 @@
+{
+  "name": "af3_test_monomer",
+  "modelSeeds": [1],
+  "sequences": [
+    {
+      "protein": {
+        "id": "A",
+        "sequence": "PVLSCGEWQL",
+        "description": "Small monomer smoke test",
+        "templates": []
+      }
+    }
+  ],
+  "dialect": "alphafold3",
+  "version": 4
+}

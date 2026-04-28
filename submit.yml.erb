@@ -58,3 +58,6 @@ script:
     - "--constraint=<%= gpu_cfg['constraint'] %>"
 <% end %>
 <% end %>
+<% if defined?(ta_qos) && ta_qos == "interactive" %>
+    - "--qos=<%= ta_qos %>"
+<% end %>

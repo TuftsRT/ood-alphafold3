@@ -1,0 +1,16 @@
+{
+  "name": "af3_test_homodimer",
+  "modelSeeds": [1],
+  "sequences": [
+    {
+      "protein": {
+        "id": ["A", "B"],
+        "sequence": "GMRESYANENQFGFKTINSDIHKIVIVGGYGKLGGLFAR",
+        "description": "Small homodimer smoke test",
+        "templates": []
+      }
+    }
+  ],
+  "dialect": "alphafold3",
+  "version": 4
+}
