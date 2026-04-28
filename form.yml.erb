@@ -1,19 +1,69 @@
 ---
-cluster: "pax"
-attributes:
-  modules: "alphafold3"
+<%
+# Site-local defaults to review before deployment.
+cluster_name = ENV.fetch('OOD_AF3_CLUSTER', 'pax')
+default_browser_root = ENV.fetch('OOD_AF3_BROWSER_ROOT', '/cluster/tufts')
+default_model_dir = ENV.fetch('OOD_AF3_DEFAULT_MODEL_DIR', '')
+@partition_filter = :gpu
+
+# Evaluate the shared resource_discovery.erb and capture its result. We use
+# result(binding) so methods/variables defined inside become available here.
+# IMPORTANT: cluster must appear AFTER this block because result(binding)
+# resets the ERB output buffer, wiping anything output before it.
+_partial_path = '/var/www/ood/apps/sys/ood-resource-discovery/resource_discovery.erb'
+_resource_result = ERB.new(File.read(_partial_path)).result(binding)
+%>
+
+cluster: "<%= cluster_name %>"
+
+bc_dynamic_js: true
+
+form:
+  - bc_num_hours
+  - partition
+  - gpu_type
+  - num_cores
+  - num_memory
+  - version
+  - work_dir
+  - num_inputs
+  - json_path
+  - input_dir
+  - output_dir
+  - database_dir
+  - model_dir
+  - max_template_date
+  - advanced_options
+  - run_data_pipeline
+  - run_inference
+  - num_diffusion_samples
+  - num_recycles
+  - num_seeds
+  - conformer_max_iterations
+  - flash_attention_implementation
+  - gpu_device
+  - save_embeddings
+  - save_distogram
+  - force_output_dir
+  - compress_large_output_files
+  - jax_compilation_cache_dir
+  - resolve_msa_overlaps
+  - extra_parameters
 
 attributes:
-<%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/all_partition.yml").indent(2) %>
-<%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/gpu_type.yml").indent(2) %>
-<%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/num_cores_generic.yml").indent(2) %>
-<%= File.read("/etc/ood/config/apps/dashboard/batch_connect/partials/num_memory_generic.yml").indent(2) %>
+  modules: "alphafold3"
+<%= generate_partition_field.indent(2) %>
+<%= generate_gpu_type_field.indent(2) %>
+<%= generate_num_cores_field.indent(2) %>
+<%= generate_num_memory_field.indent(2) %>
+<%= generate_num_hours_field.indent(2) %>
 
   version:
     label: Version
     widget: select
     options:
-           - ["3.0.1"]
+      - ["3.0.2"]
+      - ["3.0.1"]
 
   num_inputs:
     widget: "select"
@@ -24,141 +74,211 @@ attributes:
 
   json_path:
     widget: "path_selector"
-    directory: "/cluster/tufts"      
+    directory: "<%= default_browser_root %>"
     required: false
-    label: json_path
+    label: Input JSON file
     help: |
-        Path to the input JSON file.
+      Path to a single AlphaFold 3 input JSON file. Use this or the input directory below, not both.
     favorites:
-        - /cluster/tufts
-        - /cluster/home
+      - "<%= default_browser_root %>"
+      - /cluster/home
 
   input_dir:
     widget: "path_selector"
-    directory: "/cluster/tufts"
+    directory: "<%= default_browser_root %>"
     required: false
-    label: input_dir
-    help: | 
-        Path to the directory containing input JSON files
+    label: Input directory
+    help: |
+      Path to a directory containing one or more AlphaFold 3 input JSON files. Use this or the single input JSON file above, not both.
     favorites:
-        - /cluster/tufts
-        - /cluster/home
+      - "<%= default_browser_root %>"
+      - /cluster/home
 
   model_dir:
     widget: "path_selector"
     required: true
-    label: model_dir
-    help: | 
-           <p>Users needs to obtain their own copy of the trained model parameters by completing  
-           <a href="https://docs.google.com/forms/d/e/1FAIpQLSfWZAgo1aYk0O4MuAXZj8xRQ8DafeFJnldNOnh_13qAx2ceZw/viewform" target="_blank">this form </a>.</p>
+    label: Model directory
+    value: "<%= default_model_dir %>"
+    help: |
+      <p>Path to the AlphaFold 3 model parameters directory.</p>
+      <p>Users must obtain their own copy of the trained model parameters by completing
+      <a href="https://docs.google.com/forms/d/e/1FAIpQLSfWZAgo1aYk0O4MuAXZj8xRQ8DafeFJnldNOnh_13qAx2ceZw/viewform" target="_blank">this form</a>.</p>
     favorites:
-        - /cluster/tufts
-        - /cluster/home
+      - "<%= default_browser_root %>"
+      - /cluster/home
 
   work_dir:
     label: "Working directory"
     widget: "path_selector"
     required: false
-    help: "Select your project directory; defaults to $HOME"
+    help: "Project directory for the job. Leave blank to use $HOME."
     favorites:
-        - /cluster/tufts
-        - /cluster/home
+      - "<%= default_browser_root %>"
+      - /cluster/home
 
   output_dir:
     widget: "text_field"
     required: true
     label: Output directory
-    help: "Where the results will be going to (relative to the working directory field above). Example: alphafold_output" 
+    help: "Results directory. Relative paths are resolved from the working directory. Example: alphafold_output"
+
+  database_dir:
+    widget: "path_selector"
+    required: true
+    label: Database directory
+    value: "/cluster/tufts/biocontainers/datasets/alphafold3/20241219/public_databases"
+    directory: "<%= default_browser_root %>"
+    help: "Path to the AlphaFold 3 public databases directory."
+    favorites:
+      - /cluster/tufts
+      - /cluster/home
 
   max_template_date:
     label: Max template date
     widget: text_field
     value: "2021-09-30"
     help: |
-         Maximum template release date to consider. Format: YYYY-MM-DD. All templates released after this date will be ignored
+      Maximum template release date to consider. Format: YYYY-MM-DD.
 
   advanced_options:
     label: Advanced options
     widget: 'check_box'
     html_options:
-        data:
-            hide-run_data_pipeline-when-un-checked: true
-            hide-run_inference-when-un-checked: true
-            hide-num_diffusion_samples-when-un-checked: true
-            hide-num_recycles-when-un-checked: true
-            hide-num_seeds-when-un-checked: true
-            hide-conformer_max_iterations-when-un-checked: true
-            hide-extra_parameters-when-un-checked: true
+      data:
+        hide-run_data_pipeline-when-un-checked: true
+        hide-run_inference-when-un-checked: true
+        hide-num_diffusion_samples-when-un-checked: true
+        hide-num_recycles-when-un-checked: true
+        hide-num_seeds-when-un-checked: true
+        hide-conformer_max_iterations-when-un-checked: true
+        hide-flash_attention_implementation-when-un-checked: true
+        hide-gpu_device-when-un-checked: true
+        hide-save_embeddings-when-un-checked: true
+        hide-save_distogram-when-un-checked: true
+        hide-force_output_dir-when-un-checked: true
+        hide-compress_large_output_files-when-un-checked: true
+        hide-jax_compilation_cache_dir-when-un-checked: true
+        hide-resolve_msa_overlaps-when-un-checked: true
+        hide-extra_parameters-when-un-checked: true
 
   run_data_pipeline:
-    label: run_data_pipeline
+    label: Run data pipeline
     widget: check_box
     value: 1
+    checked_value: 1
     unchecked_value: 0
     help: |
-        Whether to run the data pipeline, i.e. genetic and template search. 
-        This part is CPU-only, time consuming and could be run on a machine without a GPU.
+      Whether to run the data pipeline, including MSA and template search. This stage is CPU-only and can be run without a GPU.
 
   run_inference:
-    label: run_inference
+    label: Run inference
     widget: check_box
     value: 1
+    checked_value: 1
     unchecked_value: 0
     help: |
-        Whether to run the inference. This part requires a GPU.
+      Whether to run structure inference. This stage requires a GPU.
 
   num_diffusion_samples:
-    label: num_diffusion_samples
+    label: Diffusion samples
     widget: text_field
     value: "5"
     help: |
-           Number of diffusion samples to generate.
+      Number of diffusion samples to generate.
 
   num_recycles:
-    label: num_recycles
+    label: Recycles
     widget: text_field
     value: "10"
     help: |
-          Number of recycles to use during inference.
+      Number of recycles to use during inference.
 
   num_seeds:
-    label: num_seeds
+    label: Number of seeds
     widget: text_field
     help: |
-           Number of seeds to use for inference. If set, only a single seed must be provided in the input JSON. AlphaFold 3 will then generate random seeds in sequence, starting from the single seed specified in the input JSON. The full input JSON produced by AlphaFold 3 will include the generated random seeds. If not set, AlphaFold 3 will use the seeds as provided in the input JSON.
+      If set, the input JSON must provide exactly one seed. AlphaFold 3 will expand from that seed and write the generated seeds into the produced JSON.
 
   conformer_max_iterations:
-    label: conformer_max_iterations
+    label: Conformer max iterations
     widget: text_field
     help: |
-          Optional override for maximum number of iterations to run for RDKit conformer search.
+      Optional override for the maximum number of RDKit conformer-search iterations.
+
+  flash_attention_implementation:
+    label: Flash attention implementation
+    widget: select
+    options:
+      - ["triton"]
+      - ["cudnn"]
+      - ["xla"]
+    value: "triton"
+    help: |
+      AlphaFold 3 v3.x supports triton, cudnn, and xla. For GPU compute capability 7.x, upstream requires xla.
+
+  gpu_device:
+    label: GPU device index
+    widget: text_field
+    value: "0"
+    help: |
+      Zero-based GPU index used by AlphaFold 3 after any CUDA_VISIBLE_DEVICES filtering.
+
+  save_embeddings:
+    label: Save embeddings
+    widget: check_box
+    checked_value: 1
+    unchecked_value: 0
+    help: |
+      Save the final trunk single and pair embeddings. These files can be large.
+
+  save_distogram:
+    label: Save distogram
+    widget: check_box
+    checked_value: 1
+    unchecked_value: 0
+    help: |
+      Save the final distogram. This file can be large.
+
+  force_output_dir:
+    label: Reuse existing output directory
+    widget: check_box
+    checked_value: 1
+    unchecked_value: 0
+    help: |
+      Force AlphaFold 3 to reuse a non-empty output directory instead of creating a timestamped one.
+
+  compress_large_output_files:
+    label: Compress large output files
+    widget: check_box
+    checked_value: 1
+    unchecked_value: 0
+    help: |
+      Compress the largest output files, including mmCIF and confidences JSON.
+
+  jax_compilation_cache_dir:
+    label: JAX compilation cache directory
+    widget: path_selector
+    value: "<%= ENV['HOME'] %>/.cache/alphafold3/jax"
+    directory: "<%= ENV['HOME'] %>"
+    favorites:
+      - "<%= ENV['HOME'] %>"
+      - "<%= default_browser_root %>"
+      - /cluster/home
+    help: |
+      Optional path to a JAX compilation cache directory. Reusing this cache can reduce startup overhead for repeated AlphaFold 3 jobs with similar shapes.
+
+  resolve_msa_overlaps:
+    label: Resolve MSA overlaps
+    widget: check_box
+    value: 1
+    checked_value: 1
+    unchecked_value: 0
+    help: |
+      Upstream defaults this to true. Set it to false when providing carefully paired custom MSAs, as described in the official AlphaFold 3 input documentation.
 
   extra_parameters:
     widget: text_field
     required: false
     label: Extra parameters
     help: |
-           Extra parameters to use. Multiple space-separated parameters can be used.
-
-form:
-  - bc_num_hours
-  - num_cores
-  - num_memory
-  - partition
-  - gpu_type 
-  - version
-  - work_dir
-  - num_inputs
-  - json_path
-  - input_dir
-  - output_dir
-  - model_dir
-  - max_template_date
-  - advanced_options
-  - run_data_pipeline
-  - run_inference
-  - num_diffusion_samples
-  - num_recycles
-  - num_seeds
-  - conformer_max_iterations
-  - extra_parameters
+      Additional `run_alphafold.py` flags. Use space-separated arguments.

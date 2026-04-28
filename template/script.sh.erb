@@ -1,101 +1,192 @@
 #!/usr/bin/env bash
 
-# Go to workding directory
-work_dir=<%= context.work_dir %>
+set -euo pipefail
 
-if [ ! -d "$work_dir" ]
-then
-	echo "$work_dir does not exist."
-	mkdir -p $work_dir
-fi
-cd $work_dir
-
-
-# Pipeline parameters
-database_path="/cluster/tufts/biocontainers/datasets/alphafold3/20241219/public_databases"
-input_json=<%= context.json_path %>
-input_dir=<%= context.input_dir %>
-output_dir=<%= context.output_dir %>
-model_dir=<%= context.model_dir %>
-run_data_pipeline="<%= context.run_data_pipeline %>"
-run_inference="<%= context.run_inference %>"
-max_template_date=<%= context.max_template_date %>
-num_diffusion_samples=<%= context.num_diffusion_samples %>
-num_recycles=<%= context.num_recycles %>
-num_seeds=<%= context.num_seeds %>
-conformer_max_iterations_input=<%= context.conformer_max_iterations %>
-extra_parameters="<%= context.extra_parameters %>"
-
-
-# Test whether single input json is provided
-if [[ -n "${input_json//[[:blank:]]/}" ]]
-then
-    echo "The input is provided as a fasta file"
-    input="--json_path=$input_json"
-else if [[ -n "${input_dir//[[:blank:]]/}" ]]
-then
-    echo "The input is provided as a directory"
-    input="--input_dir=$input_dir"
-else
-    echo "No input is provided"
-    exit 1
-fi
-fi
-
-# Function to convert flags to boolean parameters
-set_boolean_param() {
-    local flag=$1
-    local param_name=$2
-    if [ "$flag" -eq 1 ]; then
-        echo "--$param_name=true"
-    else
-        echo "--$param_name=false"
-    fi
+trim() {
+  local value="${1:-}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
 }
 
-# Optional parameters
-run_data_pipeline=$(set_boolean_param "$run_data_pipeline" "run_data_pipeline")
-run_inference=$(set_boolean_param "$run_inference" "run_inference")
+resolve_path() {
+  local path_value
+  path_value="$(trim "${1:-}")"
 
-# Test whether num_seeds is set
-if [ -z "${num_seeds// }" ]
-then
-        num_seeds=""
-else
-        num_seeds="--num_seeds=$num_seeds"
+  if [[ -z "$path_value" ]]; then
+    return 1
+  elif [[ "$path_value" = /* ]]; then
+    printf '%s' "$path_value"
+  else
+    printf '%s' "$HOME/$path_value"
+  fi
+}
+
+append_bool_flag() {
+  local flag_name="$1"
+  local flag_value="$2"
+
+  if [[ "$flag_value" == "1" ]]; then
+    af3_command+=("--${flag_name}=true")
+  else
+    af3_command+=("--${flag_name}=false")
+  fi
+}
+
+append_value_flag() {
+  local flag_name="$1"
+  local flag_value
+  flag_value="$(trim "${2:-}")"
+
+  if [[ -n "$flag_value" ]]; then
+    af3_command+=("--${flag_name}=${flag_value}")
+  fi
+}
+
+database_path="$(trim "<%= context.database_dir %>")"
+if [[ -z "$database_path" ]]; then
+  database_path="${ALPHAFOLD3_DB_DIR:-/cluster/tufts/biocontainers/datasets/alphafold3/20241219/public_databases}"
+fi
+module_name="${ALPHAFOLD3_MODULE_NAME:-alphafold3/<%= context.version %>}"
+input_json="$(trim "<%= context.json_path %>")"
+input_dir="$(trim "<%= context.input_dir %>")"
+model_dir="$(trim "<%= context.model_dir %>")"
+run_data_pipeline="$(trim "<%= context.run_data_pipeline %>")"
+run_inference="$(trim "<%= context.run_inference %>")"
+max_template_date="$(trim "<%= context.max_template_date %>")"
+num_diffusion_samples="$(trim "<%= context.num_diffusion_samples %>")"
+num_recycles="$(trim "<%= context.num_recycles %>")"
+num_seeds="$(trim "<%= context.num_seeds %>")"
+conformer_max_iterations="$(trim "<%= context.conformer_max_iterations %>")"
+flash_attention_implementation="$(trim "<%= context.flash_attention_implementation %>")"
+gpu_device="$(trim "<%= context.gpu_device %>")"
+save_embeddings="$(trim "<%= context.save_embeddings %>")"
+save_distogram="$(trim "<%= context.save_distogram %>")"
+force_output_dir="$(trim "<%= context.force_output_dir %>")"
+compress_large_output_files="$(trim "<%= context.compress_large_output_files %>")"
+jax_compilation_cache_dir="$(trim "<%= context.jax_compilation_cache_dir %>")"
+resolve_msa_overlaps="$(trim "<%= context.resolve_msa_overlaps %>")"
+extra_parameters="$(trim "<%= context.extra_parameters %>")"
+
+if ! work_dir="$(resolve_path "<%= context.work_dir %>")"; then
+  work_dir="$HOME"
 fi
 
-# Test whether num_recycles is set
-if [ -z "${num_recycles// }" ]
-then
-        num_recycles=""
+mkdir -p "$work_dir"
+cd "$work_dir"
+
+output_dir_input="$(trim "<%= context.output_dir %>")"
+if [[ -z "$output_dir_input" ]]; then
+  echo "output_dir is required."
+  exit 1
+elif [[ "$output_dir_input" = /* ]]; then
+  output_dir="$output_dir_input"
 else
-        num_recycles="--num_recycles=$num_recycles"
+  output_dir="$work_dir/$output_dir_input"
 fi
 
-# Test whether num_diffusion_samples is set
-if [ -z "${num_diffusion_samples// }" ]
-then
-        num_diffusion_samples=""
+if [[ -n "$input_json" && -n "$input_dir" ]]; then
+  echo "Provide either json_path or input_dir, not both."
+  exit 1
+elif [[ -n "$input_json" ]]; then
+  if [[ ! -f "$input_json" ]]; then
+    echo "Input JSON file not found: $input_json"
+    exit 1
+  fi
+  input_flag="--json_path=$input_json"
+elif [[ -n "$input_dir" ]]; then
+  if [[ ! -d "$input_dir" ]]; then
+    echo "Input directory not found: $input_dir"
+    exit 1
+  fi
+  input_flag="--input_dir=$input_dir"
 else
-        num_diffusion_samples="--num_diffusion_samples=$num_diffusion_samples"
+  echo "No input provided. Set either json_path or input_dir."
+  exit 1
 fi
 
-# Test whether conformer_max_iterations is set
-if [ -z "${conformer_max_iterations_input// }" ]
-then
-        conformer_max_iterations=""
-else
-        conformer_max_iterations="--conformer_max_iterations=$conformer_max_iterations_input"
+if [[ ! -d "$model_dir" ]]; then
+  echo "Model directory not found: $model_dir"
+  exit 1
 fi
 
-nvidia-smi
+if [[ ! -d "$database_path" ]]; then
+  echo "Database directory not found: $database_path"
+  exit 1
+fi
+
+if [[ -n "$jax_compilation_cache_dir" ]]; then
+  if [[ "$jax_compilation_cache_dir" != /* ]]; then
+    jax_compilation_cache_dir="$HOME/$jax_compilation_cache_dir"
+  fi
+  mkdir -p "$jax_compilation_cache_dir"
+fi
+
+if [[ "$run_data_pipeline" != "1" && "$run_inference" != "1" ]]; then
+  echo "At least one of run_data_pipeline or run_inference must be enabled."
+  exit 1
+fi
+
+mkdir -p "$output_dir"
+
 module purge
-module load alphafold3/<%= context.version %>
-module list 
-export APPTAINERENV_TF_FORCE_UNIFIED_MEMORY=1  
+module load "$module_name"
+module list
 
-af3_command="run_alphafold.py $input --output_dir=$output_dir --db_dir $database_path --model_dir=$model_dir $run_data_pipeline $run_inference --max_template_date=$max_template_date $num_recycles $num_seeds $num_diffusion_samples $conformer_max_iterations $extra_parameters"
+bind_path="/cluster/tufts"
+if [[ -n "${APPTAINER_BINDPATH:-}" ]]; then
+  export APPTAINER_BINDPATH="${APPTAINER_BINDPATH},${bind_path}"
+else
+  export APPTAINER_BINDPATH="${bind_path}"
+fi
 
-echo "Running command: $af3_command"
-eval $af3_command
+if [[ -n "${SINGULARITY_BINDPATH:-}" ]]; then
+  export SINGULARITY_BINDPATH="${SINGULARITY_BINDPATH},${bind_path}"
+else
+  export SINGULARITY_BINDPATH="${bind_path}"
+fi
+
+if [[ "$run_inference" == "1" ]]; then
+  nvidia-smi
+  export APPTAINERENV_TF_FORCE_UNIFIED_MEMORY=1
+fi
+
+af3_command=(
+  run_alphafold.py
+  "$input_flag"
+  "--output_dir=$output_dir"
+  "--db_dir=$database_path"
+  "--model_dir=$model_dir"
+  "--max_template_date=$max_template_date"
+)
+
+append_bool_flag "run_data_pipeline" "$run_data_pipeline"
+append_bool_flag "run_inference" "$run_inference"
+append_bool_flag "save_embeddings" "$save_embeddings"
+append_bool_flag "save_distogram" "$save_distogram"
+append_bool_flag "force_output_dir" "$force_output_dir"
+append_bool_flag "compress_large_output_files" "$compress_large_output_files"
+append_bool_flag "resolve_msa_overlaps" "$resolve_msa_overlaps"
+
+append_value_flag "num_diffusion_samples" "$num_diffusion_samples"
+append_value_flag "num_recycles" "$num_recycles"
+append_value_flag "num_seeds" "$num_seeds"
+append_value_flag "conformer_max_iterations" "$conformer_max_iterations"
+append_value_flag "flash_attention_implementation" "$flash_attention_implementation"
+append_value_flag "gpu_device" "$gpu_device"
+append_value_flag "jax_compilation_cache_dir" "$jax_compilation_cache_dir"
+
+if [[ "$run_data_pipeline" == "1" && -n "${SLURM_CPUS_PER_TASK:-}" ]]; then
+  af3_command+=("--jackhmmer_n_cpu=${SLURM_CPUS_PER_TASK}")
+  af3_command+=("--nhmmer_n_cpu=${SLURM_CPUS_PER_TASK}")
+fi
+
+if [[ -n "$extra_parameters" ]]; then
+  read -r -a extra_parameter_array <<< "$extra_parameters"
+  af3_command+=("${extra_parameter_array[@]}")
+fi
+
+printf 'Running command:'
+printf ' %q' "${af3_command[@]}"
+printf '\n'
+"${af3_command[@]}"

@@ -8,5 +8,9 @@ export host="$(hostname)"
 export port=1234
 
 WORKING_DIR="<%= context.work_dir %>"
+if [[ -z "${WORKING_DIR//[[:space:]]/}" ]]; then
+  WORKING_DIR="$HOME"
+elif [[ "$WORKING_DIR" != /* ]]; then
+  WORKING_DIR="$HOME/$WORKING_DIR"
+fi
 export working_path="$WORKING_DIR"
-

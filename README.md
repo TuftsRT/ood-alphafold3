@@ -1,75 +1,128 @@
-# Batch Connect - Example Jupyter Notebook Server
+# AlphaFold 3 Open OnDemand App
 
-![GitHub Release](https://img.shields.io/github/release/osc/bc_example_jupyter.svg)
-![GitHub License](https://img.shields.io/github/license/osc/bc_example_jupyter.svg)
+This repository contains an Open OnDemand Batch Connect app for launching
+[AlphaFold 3](https://github.com/google-deepmind/alphafold3) on a Slurm-based
+HPC cluster.
 
-An example Batch Connect app that launches a Jupyter Notebook server within a
-batch job.
+The app is structured so this directory can stand on its own as a GitHub
+repository for Appverse-style sharing.
 
-## Prerequisites
+## Features
 
-This Batch Connect app requires the following software be installed on the
-**compute nodes** that the batch job is intended to run on (**NOT** the
-OnDemand node):
+- Targets AlphaFold 3 `v3.0.2` parameters in the launch form.
+- Supports either `--json_path` or `--input_dir`.
+- Exposes useful upstream flags including `run_data_pipeline`,
+  `run_inference`, `num_diffusion_samples`, `num_recycles`, `num_seeds`,
+  `conformer_max_iterations`, `flash_attention_implementation`, `gpu_device`,
+  `save_embeddings`, `save_distogram`, `force_output_dir`,
+  `compress_large_output_files`, `jax_compilation_cache_dir`, and
+  `resolve_msa_overlaps`.
+- Dynamically discovers Slurm partitions, GPU types, CPU limits, memory limits,
+  and wall-time limits at form-render time.
+- Derives Slurm GPU submission flags from the selected partition and GPU type.
+- Supports data-pipeline-only, inference-only, or combined runs.
 
-- [Jupyter Notebook](http://jupyter.readthedocs.io/en/latest/) 4.2.3+ (earlier
-  versions are untested but may work for you)
-- [OpenSSL](https://www.openssl.org/) 1.0.1+ (used to hash the Jupyter Notebook
-  server password)
+## Repository Layout
 
-**Optional** software:
+- `manifest.yml`: Open OnDemand app metadata.
+- `form.yml.erb`: Main launch form.
+- `form.js`: Dynamic browser logic for partition and resource fields.
+- `submit.yml.erb`: Slurm submission template.
+- `/var/www/ood/apps/sys/ood-resource-discovery/resource_discovery.erb`:
+  shared Slurm resource discovery helper used by this app.
+- `template/before.sh.erb`: Session metadata and working-path setup.
+- `template/script.sh.erb`: Main AlphaFold 3 launcher.
+- `view.html.erb`: Session card view.
+- `docs/DEPLOYMENT.md`: Site deployment checklist.
 
-- [Lmod](https://www.tacc.utexas.edu/research-development/tacc-projects/lmod)
-  6.0.1+ or any other `module purge` and `module load <modules>` based CLI
-  used to load appropriate environments within the batch job before launching
-  the Jupyter Notebook server.
+## Requirements
 
-## Install
+- Open OnDemand with Batch Connect support.
+- Slurm scheduler.
+- AlphaFold 3 installed and runnable on compute nodes.
+- AlphaFold 3 model parameters obtained from Google DeepMind.
+- Accessible AlphaFold 3 databases on the compute nodes.
+- Either:
+  - a site module named like `alphafold3/<version>`, or
+  - an environment override for `ALPHAFOLD3_MODULE_NAME`
 
-These are command line only installation directions.
+## Site-Specific Configuration
 
-We start by downloading a zipped package of this code. This allows us to start
-with a fresh directory that has no git history as we will be building off of
-this.
+This app is meant to be reusable, but each site should review a few defaults.
 
-```sh
-# Download the zip from the GitHub page
-wget https://github.com/OSC/bc_example_jupyter/archive/master.tar.gz
+### In `form.yml.erb`
 
-# Create a catchy directory
-mkdir my_jupyter_app
+Review the top ERB variables:
 
-# Unzip the downloaded file into this directory
-tar xzvf master.tar.gz -C my_jupyter_app --strip-components=1
+- `OOD_AF3_CLUSTER`: Open OnDemand cluster name.
+- `OOD_AF3_BROWSER_ROOT`: default path-selector browser root.
+- `OOD_AF3_DEFAULT_MODEL_DIR`: optional default model-parameter directory.
 
-# Change the working directory to this new directory
-cd my_jupyter_app
+This app currently expects the shared site-level resource discovery partial at:
+
+`/var/www/ood/apps/sys/ood-resource-discovery/resource_discovery.erb`
+
+### In `template/script.sh.erb`
+
+Review these runtime environment variables:
+
+- `ALPHAFOLD3_MODULE_NAME`: module loaded before launch.
+- `ALPHAFOLD3_DB_DIR`: AlphaFold 3 database directory.
+
+If your site does not use modules, replace the module-loading section with your
+preferred environment setup.
+
+## Installation
+
+1. Copy this app directory into your Open OnDemand system app location.
+2. Review `form.yml.erb` and update site defaults if needed.
+3. Review `template/script.sh.erb` and set the database/module strategy for
+   your cluster.
+4. Confirm compute nodes can execute `run_alphafold.py`.
+5. Confirm the selected partitions expose the expected GPU and CPU resources to
+   Slurm.
+6. Launch a small test job from Open OnDemand.
+
+## Testing
+
+Useful syntax checks:
+
+```bash
+erb -x -T '-' form.yml.erb | ruby -c
+erb -x -T '-' submit.yml.erb | ruby -c
+node --check form.js
+perl -0pe 's/<%= context\.version %>/3.0.2/g' template/script.sh.erb | bash -n
 ```
 
-From here you will make any modifications to the code that you would like and
-version your changes in your own repository:
+Then test three launch modes in Open OnDemand:
 
-```sh
-# Version our app by making a new Git repository
-git init
+1. Data pipeline only
+2. Inference only
+3. Combined pipeline + inference
 
-#
-# Make all your code changes while testing them in the OnDemand Dashboard
-#
-# ...
-#
+## Troubleshooting
 
-# Add the files to the Git repository
-git add --all
+- If inference is enabled on a CPU-only partition, the form and submit logic
+  will block the job.
+- If jobs fail immediately, verify the AlphaFold 3 module and database path on
+  the compute node.
+- If `json_path` and `input_dir` are both set, the launcher exits with a clear
+  validation error.
+- If custom paired MSAs are used, review `resolve_msa_overlaps` against the
+  official AlphaFold 3 input documentation.
 
-# Commit the staged files to the Git repository
-git commit -m "my first commit"
-```
+## Known Limitations
 
-## Contributing
+- This app assumes Slurm.
+- Resource discovery depends on Slurm commands such as `scontrol` and `sinfo`
+  being available where the OOD form renders.
+- This app currently depends on a shared site-level resource-discovery partial
+  rather than bundling that helper inside the app directory.
+- The app does not bundle AlphaFold 3 itself or model parameters.
+- Sites may need to adjust GPU naming conventions if their Slurm `Gres` and
+  feature labels differ.
 
-1. Fork it ( https://github.com/OSC/bc_example_jupyter/fork )
-2. Create your feature branch (`git checkout -b my-new-feature`)
-3. Commit your changes (`git commit -am 'Add some feature'`)
-4. Push to the branch (`git push origin my-new-feature`)
-5. Create a new Pull Request
+## Upstream References
+
+- [AlphaFold 3 repository](https://github.com/google-deepmind/alphafold3)
+- [AlphaFold 3 input documentation](https://github.com/google-deepmind/alphafold3/blob/main/docs/input.md)

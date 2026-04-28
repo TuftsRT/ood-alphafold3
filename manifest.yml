@@ -1,8 +1,16 @@
 ---
-name: AlphaFold3
+name: AlphaFold 3
 category: Interactive Apps
 subcategory: Bioinformatics
 role: batch_connect
+icon: icon.png
+caption: Launch AlphaFold 3
 description: |
-  <p>This app will launch 
-  <a href="https://github.com/google-deepmind/alphafold3" target="_blank">AlphaFold3 </a> developed by DeepMind.</p> 
+  Launch AlphaFold 3 through Open OnDemand for structure prediction jobs that
+  run the AlphaFold 3 data pipeline, inference stage, or both.
+metadata:
+  implementation: Batch Connect
+  tags:
+    - Batch Connect
+    - GPU-enabled
+    - Bioinformatics

@@ -1,34 +1,60 @@
-# Job submission configuration file
-#
----
+<%
+require 'open3'
+
+def capture_stdout(cmd)
+  stdout, status = Open3.capture2(cmd)
+  status.success? ? stdout : ''
+rescue
+  ''
+end
+
+def partition_has_gpus?(partition)
+  capture_stdout('scontrol show node --oneliner').each_line.any? do |line|
+    parts_str = line[/\bPartitions=(\S+)/, 1]
+    parts = parts_str ? parts_str.split(',') : []
+    next false unless parts.include?(partition.to_s)
+
+    line.match?(/\bGres=gpu:[[:alnum:]_.-]+/)
+  end
+end
+
+run_inference_enabled = !defined?(run_inference) || run_inference.to_s == '1'
+selected_gpu = gpu_type.to_s.strip
+gpu_partition = partition_has_gpus?(partition)
+
+if run_inference_enabled
+  raise "Partition #{partition} does not provide GPUs, but AlphaFold 3 inference was requested." unless gpu_partition
+
+  if selected_gpu.empty? || ['any', 'none'].include?(selected_gpu)
+    raise "A concrete GPU type must be selected for partition #{partition} when AlphaFold 3 inference is enabled."
+  end
+
+  gres_name = selected_gpu.split('-', 2).first
+  gpu_cfg = { 'gres' => "gpu:#{gres_name}:1" }
+  gpu_cfg['constraint'] = selected_gpu if selected_gpu.include?('-')
+else
+  gpu_cfg = nil
+end
+%>
 batch_connect:
   template: "basic"
   conn_params:
-    - working_path  
+    - working_path
 script:
   email_on_started: true
   email_on_terminated: true
   email: <%= ENV["USER"] %>@tufts.edu
   job_name: "OnDemand/AlphaFold3"
+  wall_time: "<%= bc_num_hours.to_i * 3600 %>"
   native:
-    - "--time=<%= bc_num_hours %>:00:00"
     - "--cpus-per-task=<%= num_cores %>"
     - "--mem=<%= num_memory %>G"
     - "--nodes=1"
-    - "-p <%= partition %>"
-<%
-  skip_gres = gpu_type == "none" || ["batch", "largemem", "rc2", "pangolinlab", "ruiguolab", "shushkovlab", "vaseylab"].include?(partition)
-%>
-<% unless skip_gres %>
-  <% if gpu_type == "a100_40" %>
-    - "--gres=gpu:a100:1"
-    - "--constraint=a100-40G"
-  <% elsif gpu_type == "a100_80" %>
-    - "--gres=gpu:a100:1"
-    - "--constraint=a100-80G"
-  <% elsif gpu_type == "any" %>
-    - "--gres=gpu:1"
-  <% else %>
-    - "--gres=gpu:<%= gpu_type %>:1"
-  <% end %>
+    - "-p"
+    - "<%= partition %>"
+<% if gpu_cfg %>
+    - "--gres=<%= gpu_cfg['gres'] %>"
+<% if gpu_cfg['constraint'] %>
+    - "--constraint=<%= gpu_cfg['constraint'] %>"
+<% end %>
 <% end %>
