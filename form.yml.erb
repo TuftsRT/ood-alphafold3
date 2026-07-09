@@ -5,12 +5,6 @@ cluster_name = ENV.fetch('OOD_AF3_CLUSTER', 'pax')
 default_browser_root = ENV.fetch('OOD_AF3_BROWSER_ROOT', '/cluster/tufts')
 default_model_dir = ENV.fetch('OOD_AF3_DEFAULT_MODEL_DIR', '')
 
-show_qos = false
-qos_options = (`sacctmgr show assoc where user=#{ENV['USER']} format=qos%1000 --noheader --parsable2`).split(",")
-if qos_options.include?("interactive")
-  show_qos = true
-end
-
 @partition_filter = :gpu
 
 # Evaluate the shared resource_discovery.erb and capture its result. We use
@@ -56,9 +50,7 @@ form:
   - jax_compilation_cache_dir
   - resolve_msa_overlaps
   - extra_parameters
-<% if show_qos %>
   - ta_qos
-<% end %>
 
 attributes:
   modules: "alphafold3"
