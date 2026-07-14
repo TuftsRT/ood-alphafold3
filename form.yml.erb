@@ -5,13 +5,19 @@ cluster_name = ENV.fetch('OOD_AF3_CLUSTER', 'pax')
 default_browser_root = ENV.fetch('OOD_AF3_BROWSER_ROOT', '/cluster/tufts')
 default_model_dir = ENV.fetch('OOD_AF3_DEFAULT_MODEL_DIR', '')
 
+show_qos = false
+qos_options = (`sacctmgr show assoc where user=#{ENV['USER']} format=qos%1000 --noheader --parsable2`).split(",")
+if qos_options.include?("interactive")
+  show_qos = true
+end
+
 @partition_filter = :gpu
 
 # Evaluate the shared resource_discovery.erb and capture its result. We use
 # result(binding) so methods/variables defined inside become available here.
 # IMPORTANT: cluster must appear AFTER this block because result(binding)
 # resets the ERB output buffer, wiping anything output before it.
-_partial_path = '/var/www/ood/apps/sys/ood-resource-discovery/resource_discovery.erb'
+_partial_path = '/etc/ood/config/apps/dashboard/batch_connect/partials/resource_discovery.erb'
 _resource_result = ERB.new(File.read(_partial_path)).result(binding)
 %>
 
@@ -50,7 +56,9 @@ form:
   - jax_compilation_cache_dir
   - resolve_msa_overlaps
   - extra_parameters
+<% if show_qos %>
   - ta_qos
+<% end %>
 
 attributes:
   modules: "alphafold3"
@@ -166,19 +174,21 @@ attributes:
 
   run_data_pipeline:
     label: Run data pipeline
-    widget: check_box
-    value: 1
-    checked_value: 1
-    unchecked_value: 0
+    widget: select
+    value: "1"
+    options:
+      - ["True", "1"]
+      - ["False", "0"]
     help: |
       Whether to run the data pipeline, including MSA and template search. This stage is CPU-only and can be run without a GPU.
 
   run_inference:
     label: Run inference
-    widget: check_box
-    value: 1
-    checked_value: 1
-    unchecked_value: 0
+    widget: select
+    value: "1"
+    options:
+      - ["True", "1"]
+      - ["False", "0"]
     help: |
       Whether to run structure inference. This stage requires a GPU.
 
