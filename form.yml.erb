@@ -1,27 +1,11 @@
 ---
 <%
-# Site-local defaults to review before deployment.
-cluster_name = ENV.fetch('OOD_AF3_CLUSTER', 'pax')
-default_browser_root = ENV.fetch('OOD_AF3_BROWSER_ROOT', '/cluster/tufts')
-default_model_dir = ENV.fetch('OOD_AF3_DEFAULT_MODEL_DIR', '')
-
-show_qos = false
-qos_options = (`sacctmgr show assoc where user=#{ENV['USER']} format=qos%1000 --noheader --parsable2`).split(",")
-if qos_options.include?("interactive")
-  show_qos = true
-end
-
 @partition_filter = :gpu
-
-# Evaluate the shared resource_discovery.erb and capture its result. We use
-# result(binding) so methods/variables defined inside become available here.
-# IMPORTANT: cluster must appear AFTER this block because result(binding)
-# resets the ERB output buffer, wiping anything output before it.
 _partial_path = '/etc/ood/config/apps/dashboard/batch_connect/partials/resource_discovery.erb'
-_resource_result = ERB.new(File.read(_partial_path)).result(binding)
+ERB.new(File.read(_partial_path)).result(binding)
 %>
 
-cluster: "<%= cluster_name %>"
+cluster: "pax"
 
 bc_dynamic_js: true
 
@@ -56,9 +40,7 @@ form:
   - jax_compilation_cache_dir
   - resolve_msa_overlaps
   - extra_parameters
-<% if show_qos %>
   - ta_qos
-<% end %>
 
 attributes:
   modules: "alphafold3"
@@ -85,37 +67,37 @@ attributes:
 
   json_path:
     widget: "path_selector"
-    directory: "<%= default_browser_root %>"
+    directory: "/cluster/tufts"
     required: false
     label: Input JSON file
     help: |
       Path to a single AlphaFold 3 input JSON file. Use this or the input directory below, not both.
     favorites:
-      - "<%= default_browser_root %>"
+      - "/cluster/tufts"
       - /cluster/home
 
   input_dir:
     widget: "path_selector"
-    directory: "<%= default_browser_root %>"
+    directory: "/cluster/tufts"
     required: false
     label: Input directory
     help: |
       Path to a directory containing one or more AlphaFold 3 input JSON files. Use this or the single input JSON file above, not both.
     favorites:
-      - "<%= default_browser_root %>"
+      - "/cluster/tufts"
       - /cluster/home
 
   model_dir:
     widget: "path_selector"
     required: true
     label: Model directory
-    value: "<%= default_model_dir %>"
+    value: ""
     help: |
       <p>Path to the AlphaFold 3 model parameters directory.</p>
       <p>Users must obtain their own copy of the trained model parameters by completing
       <a href="https://docs.google.com/forms/d/e/1FAIpQLSfWZAgo1aYk0O4MuAXZj8xRQ8DafeFJnldNOnh_13qAx2ceZw/viewform" target="_blank">this form</a>.</p>
     favorites:
-      - "<%= default_browser_root %>"
+      - "/cluster/tufts"
       - /cluster/home
 
   work_dir:
@@ -124,7 +106,7 @@ attributes:
     required: false
     help: "Project directory for the job. Leave blank to use $HOME."
     favorites:
-      - "<%= default_browser_root %>"
+      - "/cluster/tufts"
       - /cluster/home
 
   output_dir:
@@ -138,7 +120,7 @@ attributes:
     required: true
     label: Database directory
     value: "/cluster/tufts/biocontainers/datasets/alphafold3/20241219/public_databases"
-    directory: "<%= default_browser_root %>"
+    directory: "/cluster/tufts"
     help: "Path to the AlphaFold 3 public databases directory."
     favorites:
       - /cluster/tufts
@@ -275,7 +257,7 @@ attributes:
     directory: "<%= ENV['HOME'] %>"
     favorites:
       - "<%= ENV['HOME'] %>"
-      - "<%= default_browser_root %>"
+      - "/cluster/tufts"
       - /cluster/home
     help: |
       Optional path to a JAX compilation cache directory. Reusing this cache can reduce startup overhead for repeated AlphaFold 3 jobs with similar shapes.
@@ -300,7 +282,12 @@ attributes:
     widget: check_box
     label: "Request priority start"
     cacheable: false
-    help: "Starts sooner, but is limited to 1 running job, up to 64 CPUs, and up to 64 GB of memory. If you need more resources, leave this unchecked."
+    help: |
+      Submits the job with `--qos=interactive` for higher scheduling priority, so it
+      starts sooner. Intended for short, small sessions: while the box is checked, the
+      resource fields above are automatically capped to the interactive QOS limits and
+      a notice below lists them. Leave this box unchecked if your job needs more time
+      or resources than those limits allow.
     value: "normal"
     checked_value: "interactive"
     unchecked_value: "normal"

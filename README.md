@@ -52,11 +52,11 @@ This app is meant to be reusable, but each site should review a few defaults.
 
 ### In `form.yml.erb`
 
-Review the top ERB variables:
+Review these hardcoded defaults:
 
-- `OOD_AF3_CLUSTER`: Open OnDemand cluster name.
-- `OOD_AF3_BROWSER_ROOT`: default path-selector browser root.
-- `OOD_AF3_DEFAULT_MODEL_DIR`: optional default model-parameter directory.
+- `cluster: "pax"`: Open OnDemand cluster name.
+- `/cluster/tufts`: default path-selector browser root (used by the directory pickers).
+- the empty Model directory `value`: set a site default here if desired.
 
 This app currently expects the shared site-level resource discovery partial at:
 
