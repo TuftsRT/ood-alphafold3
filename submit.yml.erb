@@ -1,60 +1,38 @@
-<%
-require 'open3'
-
-def capture_stdout(cmd)
-  stdout, status = Open3.capture2(cmd)
-  status.success? ? stdout : ''
-rescue
-  ''
-end
-
-def partition_has_gpus?(partition)
-  capture_stdout('scontrol show node --oneliner').each_line.any? do |line|
-    parts_str = line[/\bPartitions=(\S+)/, 1]
-    parts = parts_str ? parts_str.split(',') : []
-    next false unless parts.include?(partition.to_s)
-
-    line.match?(/\bGres=gpu:[[:alnum:]_.-]+/)
-  end
-end
-
-run_inference_enabled = !defined?(run_inference) || run_inference.to_s == '1'
-selected_gpu = gpu_type.to_s.strip
-gpu_partition = partition_has_gpus?(partition)
-
-if run_inference_enabled
-  raise "Partition #{partition} does not provide GPUs, but AlphaFold 3 inference was requested." unless gpu_partition
-
-  if selected_gpu.empty? || ['any', 'none'].include?(selected_gpu)
-    raise "A concrete GPU type must be selected for partition #{partition} when AlphaFold 3 inference is enabled."
-  end
-
-  gres_name = selected_gpu.split('-', 2).first
-  gpu_cfg = { 'gres' => "gpu:#{gres_name}:1" }
-  gpu_cfg['constraint'] = selected_gpu if selected_gpu.include?('-')
-else
-  gpu_cfg = nil
-end
-%>
+# Job submission configuration file
+#
 ---
 batch_connect:
   template: "basic"
   conn_params:
     - working_path
+
 script:
   email: <%= ENV["USER"] %>@tufts.edu
   job_name: "OnDemand/AlphaFold3"
-  wall_time: "<%= bc_num_hours.to_i * 3600 %>"
   native:
+    - "--time=<%= bc_num_hours %>:00:00"
     - "--cpus-per-task=<%= num_cores %>"
     - "--mem=<%= num_memory %>G"
     - "--nodes=1"
     - "--partition=<%= partition %>"
-<% if gpu_cfg %>
-    - "--gres=<%= gpu_cfg['gres'] %>"
-<% if gpu_cfg['constraint'] %>
-    - "--constraint=<%= gpu_cfg['constraint'] %>"
-<% end %>
+<%
+  # gpu_type from resource_discovery.erb is a feature variant like "a100-40G".
+  # The gres name is the part before the first "-"; the full variant is a
+  # node constraint. "any" => any GPU type (no gres name/constraint).
+  # Empty/"none" (CPU partitions) or data-pipeline-only runs => no GPU request.
+  gres_name = gpu_type.to_s.split('-', 2).first.to_s
+  run_inference_enabled = !defined?(run_inference) || run_inference.to_s == "1"
+  skip_gres = gres_name.empty? || gres_name == "none" || !run_inference_enabled
+%>
+<% unless skip_gres %>
+  <% if gres_name == "any" %>
+    - "--gres=gpu:1"
+  <% else %>
+    - "--gres=gpu:<%= gres_name %>:1"
+    <% if gpu_type.include?('-') %>
+    - "--constraint=<%= gpu_type %>"
+    <% end %>
+  <% end %>
 <% end %>
     <%- if defined?(ta_qos) && ta_qos == "interactive" -%>
     - "--qos=<%= ta_qos %>"
