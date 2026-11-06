@@ -7,7 +7,7 @@ export host="$(hostname)"
 # Hardcode port since the variable is needed but the information isn't.
 export port=1234
 
-WORKING_DIR="<%= context.work_dir %>"
+WORKING_DIR="<%= context.work_dir.to_s.strip %>"
 if [[ -z "${WORKING_DIR//[[:space:]]/}" ]]; then
   WORKING_DIR="$HOME"
 elif [[ "$WORKING_DIR" != /* ]]; then
